@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Ra IoT Dashboard | Giám Sát & Điều Khiển Thiết Bị</title>
+
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- FontAwesome 6 Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-blue-500 selection:text-white">
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-auto"></div>
+
+    <!-- Main Navigation Header -->
+    <header class="sticky top-0 z-40 border-b border-slate-200/80 dark:border-slate-800/80 glass-panel shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 sm:h-20">
+                
+                <!-- Logo & Project Identity -->
+                <div class="flex items-center gap-3 sm:gap-4">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25">
+                        <i class="fa-solid fa-microchip text-lg sm:text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-base sm:text-lg font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+                                E-Ra IoT Dashboard
+                            </h1>
+                            <span class="hidden sm:inline-block px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                EoH Platform
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Nhà kính thông minh <span class="hidden md:inline">• Thiết bị ID: <strong class="text-slate-700 dark:text-slate-200">{{ device_id }}</strong></span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Control Buttons & Online Status -->
+                <div class="flex items-center gap-2 sm:gap-4">
+                    
+                    <!-- Online / Offline Badge -->
+                    <div id="connectionBadge" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        <span id="connectionDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 online-radar"></span>
+                        <span id="connectionText" class="hidden sm:inline">Trực tuyến (Online)</span>
+                    </div>
+
+                    <!-- Polling Controller -->
+                    <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1 text-xs">
+                        <button id="togglePollingBtn" title="Bật/Tắt tự động cập nhật" class="px-2.5 py-1.5 rounded-lg font-medium text-emerald-600 dark:text-emerald-400 hover:bg-white dark:hover:bg-slate-800 transition shadow-sm">
+                            <i class="fa-solid fa-pause"></i>
+                            <span id="pollingStatusLabel" class="hidden md:inline ml-1">Tự cập nhật</span>
+                        </button>
+                        <span id="pollingCountdown" title="Thời gian đến lần quét tiếp theo" class="px-2 py-1 font-mono font-bold text-slate-600 dark:text-slate-300">
+                            3s
+                        </span>
+                        <button id="refreshBtn" title="Làm mới ngay lập tức" class="p-1.5 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </div>
+
+                    <!-- Dark / Light Theme Toggle -->
+                    <button id="themeToggleBtn" title="Chuyển chế độ sáng/tối" class="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition shadow-sm flex items-center gap-2">
+                        <i id="themeIcon" class="fa-solid fa-sun text-amber-400"></i>
+                        <span id="themeText" class="hidden lg:inline text-xs font-medium">Giao diện Sáng</span>
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- Error / Offline Alert Banner (Hiển thị khi lỗi kết nối) -->
+    <div id="errorBanner" class="hidden bg-rose-500/10 border-b border-rose-500/20 text-rose-700 dark:text-rose-300 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-4 text-xs sm:text-sm">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-triangle-exclamation text-rose-500 text-lg"></i>
+                <div>
+                    <strong class="font-semibold">Cảnh báo kết nối: </strong>
+                    <span id="errorMessageText">Không thể đồng bộ số liệu từ nền tảng E-Ra.</span>
+                </div>
+            </div>
+            <button onclick="fetchDashboardData(true)" class="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-medium text-xs shadow transition">
+                Thử lại ngay
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Container Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+
+        <!-- Top Section Bar: Status Summary & Last Sync -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/80">
+            <div>
+                <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                    Trung Tâm Giám Sát & Điều Khiển
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Dữ liệu thời gian thực được đồng bộ trực tiếp từ REST API E-Ra Platform
+                </p>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900/60 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-sm w-fit">
+                <i class="fa-regular fa-clock text-blue-500"></i>
+                <span>Cập nhật lần cuối:</span>
+                <span id="lastSyncTime" class="font-semibold text-slate-700 dark:text-slate-200">Đang đồng bộ...</span>
+            </div>
+        </div>
+
+        <!-- ====================================================================
+             A. GIÁM SÁT THÔNG SỐ CẢM BIẾN (SENSOR CARDS WIDGET)
+             ==================================================================== -->
+        <section class="space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-5 bg-blue-600 rounded-full"></div>
+                    <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Thông Số Cảm Biến Môi Trường
+                    </h3>
+                </div>
+                <span class="text-xs text-slate-400 dark:text-slate-500">
+                    Endpoint: GET /chip_manager/configs/{id}/current_value/
+                </span>
+            </div>
+
+            <!-- Sensor Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                
+                <!-- 1. Nhiệt độ -->
+                <div class="relative overflow-hidden rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Nhiệt độ</span>
+                            <div class="flex items-baseline gap-1 mt-1">
+                                <span id="tempValue" class="text-3xl font-extrabold text-slate-900 dark:text-white">--</span>
+                                <span class="text-lg font-bold text-rose-500">°C</span>
+                            </div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl shadow-sm">
+                            <i class="fa-solid fa-temperature-half"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="mt-4">
+                        <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="tempBar" class="bg-gradient-to-r from-amber-500 to-rose-500 h-2 rounded-full transition-all duration-500" style="width: 50%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 flex items-center justify-between text-xs">
+                        <span id="tempTag" class="font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">Đang đo...</span>
+                        <span class="text-slate-400 font-mono text-[11px]">ID: 195920</span>
+                    </div>
+                </div>
+
+                <!-- 2. Độ ẩm không khí -->
+                <div class="relative overflow-hidden rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Độ ẩm không khí</span>
+                            <div class="flex items-baseline gap-1 mt-1">
+                                <span id="humidAirValue" class="text-3xl font-extrabold text-slate-900 dark:text-white">--</span>
+                                <span class="text-lg font-bold text-blue-500">%</span>
+                            </div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl shadow-sm">
+                            <i class="fa-solid fa-droplet"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="mt-4">
+                        <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="humidAirBar" class="bg-gradient-to-r from-sky-400 to-blue-600 h-2 rounded-full transition-all duration-500" style="width: 70%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 flex items-center justify-between text-xs">
+                        <span id="humidAirTag" class="font-medium px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400">Tối ưu</span>
+                        <span class="text-slate-400 font-mono text-[11px]">ID: 195921</span>
+                    </div>
+                </div>
+
+                <!-- 3. Độ ẩm đất -->
+                <div class="relative overflow-hidden rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Độ ẩm đất</span>
+                            <div class="flex items-baseline gap-1 mt-1">
+                                <span id="humidSoilValue" class="text-3xl font-extrabold text-slate-900 dark:text-white">--</span>
+                                <span class="text-lg font-bold text-emerald-500">%</span>
+                            </div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-xl shadow-sm">
+                            <i class="fa-solid fa-seedling"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="mt-4">
+                        <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="humidSoilBar" class="bg-gradient-to-r from-lime-500 to-emerald-600 h-2 rounded-full transition-all duration-500" style="width: 40%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 flex items-center justify-between text-xs">
+                        <span id="humidSoilTag" class="font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">Độ ẩm tốt</span>
+                        <span class="text-slate-400 font-mono text-[11px]">ID: 195922</span>
+                    </div>
+                </div>
+
+                <!-- 4. Điện áp PIN -->
+                <div class="relative overflow-hidden rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Điện áp PIN</span>
+                            <div class="flex items-baseline gap-1 mt-1">
+                                <span id="batteryValue" class="text-3xl font-extrabold text-slate-900 dark:text-white">--</span>
+                                <span class="text-lg font-bold text-amber-500">V</span>
+                            </div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl shadow-sm">
+                            <i class="fa-solid fa-battery-three-quarters"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="mt-4">
+                        <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="batteryBar" class="bg-gradient-to-r from-amber-400 to-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 85%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 flex items-center justify-between text-xs">
+                        <span id="batteryTag" class="font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">PIN tốt</span>
+                        <span class="text-slate-400 font-mono text-[11px]">ID: 195926</span>
+                    </div>
+                </div>
+
+                <!-- 5. Trạng thái an ninh & an toàn hệ thống -->
+                <div id="statusCard" class="relative overflow-hidden rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Trạng thái an toàn</span>
+                            <div class="mt-2">
+                                <span id="statusBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500 text-white shadow-sm">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                    <span id="statusText">Bình thường</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-xl shadow-sm">
+                            <i class="fa-solid fa-bell"></i>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-4 leading-relaxed">
+                        Hệ thống RFID & Báo cháy tự động
+                    </p>
+
+                    <div class="mt-3 flex items-center justify-between text-xs">
+                        <span class="text-slate-500">0: OK | 1: Thẻ | 2: Lửa</span>
+                        <span class="text-slate-400 font-mono text-[11px]">ID: 195913</span>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ====================================================================
+             B. ĐIỀU KHIỂN THIẾT BỊ (DEVICE CONTROL PANEL - SWITCHES)
+             ==================================================================== -->
+        <section class="space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-5 bg-emerald-600 rounded-full"></div>
+                    <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        Bảng Điều Khiển Thiết Bị Trực Tiếp
+                    </h3>
+                </div>
+                <span class="text-xs text-slate-400 dark:text-slate-500">
+                    Endpoint: POST /chip_manager/trigger_action/
+                </span>
+            </div>
+
+            <!-- Actuators Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Switch 1: Máy Bơm Nước -->
+                <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl shadow-sm">
+                                <i class="fa-solid fa-faucet-drip"></i>
+                            </div>
+                            <!-- Switch Toggle -->
+                            <label class="switch-container">
+                                <input type="checkbox" id="switch_pump">
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-900 dark:text-white mt-4">Máy Bơm Nước</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Bơm tưới ẩm đất nhà kính</p>
+                    </div>
+
+                    <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="badge_pump" class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            <span id="text_pump" class="text-xs font-medium text-slate-500">ĐÃ TẮT</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono">CFG: 195914</span>
+                    </div>
+                </div>
+
+                <!-- Switch 2: Quạt Thông Gió -->
+                <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-xl shadow-sm">
+                                <i class="fa-solid fa-fan"></i>
+                            </div>
+                            <!-- Switch Toggle -->
+                            <label class="switch-container">
+                                <input type="checkbox" id="switch_fan">
+                                <span class="switch-slider switch-emerald"></span>
+                            </label>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-900 dark:text-white mt-4">Quạt Thông Gió</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Lưu thông và làm mát không khí</p>
+                    </div>
+
+                    <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="badge_fan" class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            <span id="text_fan" class="text-xs font-medium text-slate-500">ĐÃ TẮT</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono">CFG: 195915</span>
+                    </div>
+                </div>
+
+                <!-- Switch 3: Đèn Chiếu Sáng -->
+                <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl shadow-sm">
+                                <i class="fa-solid fa-lightbulb"></i>
+                            </div>
+                            <!-- Switch Toggle -->
+                            <label class="switch-container">
+                                <input type="checkbox" id="switch_light">
+                                <span class="switch-slider switch-amber"></span>
+                            </label>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-900 dark:text-white mt-4">Đèn Chiếu Sáng</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Chiếu sáng quang học cây trồng</p>
+                    </div>
+
+                    <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="badge_light" class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            <span id="text_light" class="text-xs font-medium text-slate-500">ĐÃ TẮT</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono">CFG: 195925</span>
+                    </div>
+                </div>
+
+                <!-- Switch 4: Chế Độ Auto -->
+                <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <div class="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-xl shadow-sm">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <!-- Switch Toggle -->
+                            <label class="switch-container">
+                                <input type="checkbox" id="switch_auto">
+                                <span class="switch-slider switch-purple"></span>
+                            </label>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-900 dark:text-white mt-4">Chế Độ Tự Động (Auto)</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Tự động kích hoạt bơm theo cảm biến</p>
+                    </div>
+
+                    <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="badge_auto" class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            <span id="text_auto" class="text-xs font-medium text-slate-500">THỦ CÔNG</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono">CFG: 195916</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Bonus Actuator: Ngưỡng Độ Ẩm Đất Bơm Tự Động (Slider Range) -->
+            <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-xl shadow-sm">
+                            <i class="fa-solid fa-sliders"></i>
+                        </div>
+                        <div>
+                            <h4 class="text-base font-bold text-slate-900 dark:text-white">
+                                Cài Đặt Ngưỡng Độ Ẩm Đất Bơm Tự Động
+                            </h4>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">
+                                Khi độ ẩm đất giảm xuống dưới ngưỡng này, hệ thống sẽ tự động kích hoạt máy bơm (Dải: 0 - 100%)
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4 w-full md:w-auto">
+                        <div class="flex-1 md:w-64">
+                            <div class="flex justify-between text-xs text-slate-500 mb-1">
+                                <span>0%</span>
+                                <span id="soilThresholdVal" class="font-bold text-indigo-600 dark:text-indigo-400 text-sm">20%</span>
+                                <span>100%</span>
+                            </div>
+                            <input type="range" id="soilThresholdSlider" min="0" max="100" value="20" class="w-full">
+                        </div>
+                        <button id="saveSoilThresholdBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5 whitespace-nowrap">
+                            <i class="fa-solid fa-check"></i>
+                            <span>Lưu cài đặt</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ====================================================================
+             B2. CHẨN ĐOÁN SỨC KHỎE CÂY TRỒNG BẰNG AI (GEMINI VISION) & E-RA
+             ==================================================================== -->
+        <section class="space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-5 bg-gradient-to-b from-emerald-500 to-indigo-600 rounded-full"></div>
+                    <div>
+                        <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Chẩn Đoán Sức Khỏe Cây Trồng Bằng AI</span>
+                            <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-gradient-to-r from-emerald-500/20 to-blue-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                <i class="fa-solid fa-brain mr-1"></i>Gemini Vision API
+                            </span>
+                        </h3>
+                    </div>
+                </div>
+                <span class="text-xs text-slate-400 dark:text-slate-500">
+                    Chụp/Tải ảnh lá cây + Kết hợp số liệu cảm biến E-Ra tức thời
+                </span>
+            </div>
+
+            <!-- Main Layout: 2 Columns (Left: Camera & Upload, Right: AI Diagnosis Results) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- Left Column (5 Cols): Chụp ảnh từ Camera & Tải ảnh lên -->
+                <div class="lg:col-span-5 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between space-y-4">
+                    
+                    <div>
+                        <!-- Header & Mode Tabs -->
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                                    <i class="fa-solid fa-camera"></i>
+                                </div>
+                                <span class="text-sm font-bold text-slate-800 dark:text-slate-200">Nguồn hình ảnh</span>
+                            </div>
+
+                            <!-- Tabs Switcher -->
+                            <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+                                <button id="tabCameraBtn" class="px-3 py-1 rounded-lg font-semibold bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm transition">
+                                    <i class="fa-solid fa-video mr-1"></i>Webcam
+                                </button>
+                                <button id="tabUploadBtn" class="px-3 py-1 rounded-lg font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition">
+                                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i>Tải ảnh
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Content 1: Khung Camera Trực Tiếp -->
+                        <div id="cameraSection" class="mt-4 space-y-3">
+                            <div class="relative w-full h-64 sm:h-72 rounded-xl bg-slate-950 overflow-hidden border border-slate-200 dark:border-slate-800 flex items-center justify-center">
+                                
+                                <!-- Video Stream Element -->
+                                <video id="cameraVideo" autoplay playsinline muted class="w-full h-full object-cover hidden"></video>
+                                
+                                <!-- Placeholder khi chưa bật Camera -->
+                                <div id="cameraPlaceholder" class="text-center p-6 space-y-3">
+                                    <div class="w-16 h-16 rounded-full bg-slate-800/80 text-emerald-400 flex items-center justify-center mx-auto text-2xl shadow-inner border border-slate-700">
+                                        <i class="fa-solid fa-camera-rotate"></i>
+                                    </div>
+                                    <p class="text-xs text-slate-400 max-w-xs">
+                                        Mở Camera thiết bị để quan sát trực tiếp lá cây và bấm Chụp ảnh
+                                    </p>
+                                    <button id="startCameraBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/30 transition flex items-center gap-2 mx-auto">
+                                        <i class="fa-solid fa-power-off"></i>
+                                        <span>Bật Camera</span>
+                                    </button>
+                                </div>
+
+                                <!-- Laser scanner beam (khi camera hoạt động) -->
+                                <div id="cameraScannerBeam" class="hidden scanner-laser"></div>
+
+                                <!-- Flash hiệu ứng khi bấm chụp ảnh -->
+                                <div id="shutterFlash" class="absolute inset-0 bg-white opacity-0 pointer-events-none"></div>
+
+                                <!-- Overlay Buttons khi Camera đang mở -->
+                                <div id="cameraControlsOverlay" class="absolute bottom-3 inset-x-3 hidden flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/70 backdrop-blur-md border border-white/10">
+                                    <button id="switchCameraBtn" title="Đổi camera trước/sau" class="p-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs transition">
+                                        <i class="fa-solid fa-camera-rotate text-sm"></i>
+                                    </button>
+
+                                    <!-- Nút Chụp Ảnh Chính -->
+                                    <button id="capturePhotoBtn" class="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xs shadow-lg transition flex items-center gap-2">
+                                        <i class="fa-solid fa-circle-dot text-base text-rose-200"></i>
+                                        <span>Chụp ảnh lá</span>
+                                    </button>
+
+                                    <button id="stopCameraBtn" title="Tắt camera" class="p-2.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs transition">
+                                        <i class="fa-solid fa-xmark text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Content 2: Khung Tải Ảnh Lên Từ Máy (Ẩn mặc định) -->
+                        <div id="uploadSection" class="mt-4 hidden space-y-3">
+                            <input type="file" id="leafFileInput" accept="image/*" class="hidden">
+                            <div id="dropZone" class="w-full h-64 sm:h-72 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-slate-50 dark:bg-slate-950/50 flex flex-col items-center justify-center p-6 text-center cursor-pointer transition">
+                                <div class="w-14 h-14 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mb-3">
+                                    <i class="fa-solid fa-images"></i>
+                                </div>
+                                <h5 class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                    Kéo & Thả ảnh lá cây vào đây
+                                </h5>
+                                <p class="text-xs text-slate-400 mt-1">hoặc <span class="text-emerald-500 font-semibold underline">Duyệt tệp tin</span> từ thiết bị (JPG, PNG, WEBP)</p>
+                            </div>
+                        </div>
+
+                        <!-- Khung Xem Trước Ảnh Đã Chụp / Đã Chọn -->
+                        <div id="previewContainer" class="hidden mt-4 space-y-2">
+                            <div class="relative w-full h-56 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 bg-slate-950">
+                                <img id="leafPreviewImg" src="" alt="Ảnh lá cây" class="w-full h-full object-cover">
+                                <div class="absolute top-2 right-2 flex items-center gap-2">
+                                    <span id="photoBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/90 text-white shadow">
+                                        Đã sẵn sàng
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs text-slate-400">
+                                <span id="photoFileInfo">Ảnh lá cây vừa chụp</span>
+                                <button id="retakePhotoBtn" class="text-xs text-rose-500 hover:underline flex items-center gap-1 font-medium">
+                                    <i class="fa-solid fa-arrow-rotate-left"></i> Chụp lại / Đổi ảnh
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Canvas Ẩn dùng để chụp snapshot từ Video Stream -->
+                        <canvas id="photoCanvas" class="hidden"></canvas>
+                    </div>
+
+                    <!-- Nút Bấm Thực Hiện Phân Tích AI -->
+                    <div class="pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                        <button id="analyzePlantBtn" disabled class="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-slate-300 dark:bg-slate-800 cursor-not-allowed transition flex items-center justify-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            <span id="analyzeBtnText">Chụp hoặc chọn ảnh lá để bắt đầu</span>
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- Right Column (7 Cols): Kết Quả Chẩn Đoán AI & Môi Trường E-Ra -->
+                <div class="lg:col-span-7 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between min-h-[460px]">
+                    
+                    <div>
+                        <!-- Result Header -->
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                                    <i class="fa-solid fa-stethoscope"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Báo Cáo Bác Sĩ Cây Trồng AI</h4>
+                                    <p class="text-[11px] text-slate-400">Tương quan bệnh học và môi trường vi khí hậu</p>
+                                </div>
+                            </div>
+                            <div id="aiModelBadge" class="hidden text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                Model: gemini-3.5-flash
+                            </div>
+                        </div>
+
+                        <!-- 1. Trạng Thái Chờ (Initial State) -->
+                        <div id="aiInitialState" class="py-16 text-center space-y-4">
+                            <div class="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 flex items-center justify-center mx-auto text-2xl border border-slate-200 dark:border-slate-700">
+                                <i class="fa-solid fa-plant-wilt"></i>
+                            </div>
+                            <div class="max-w-md mx-auto space-y-1">
+                                <h5 class="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                    Chưa có dữ liệu chẩn đoán
+                                </h5>
+                                <p class="text-xs text-slate-400 leading-relaxed">
+                                    Bật Camera chụp một chiếc lá cây (ớt, cà chua, dưa lưới, rau, hoa...). Mô hình Gemini Vision sẽ đọc ảnh lá và kết hợp tự động với thông số Nhiệt độ, Độ ẩm không khí, Độ ẩm đất tức thời từ E-Ra để phân tích sức khỏe.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500 pt-2">
+                                <span class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                                    <i class="fa-solid fa-leaf text-emerald-500 mr-1"></i>Nhận diện bệnh lá
+                                </span>
+                                <span class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                                    <i class="fa-solid fa-temperature-three-quarters text-blue-500 mr-1"></i>Đối soát vi khí hậu
+                                </span>
+                                <span class="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                                    <i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Khuyến nghị bật/tắt thiết bị
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- 2. Trạng Thái Đang Xử Lý (Loading State) -->
+                        <div id="aiLoadingState" class="hidden py-16 text-center space-y-5">
+                            <div class="relative w-20 h-20 mx-auto">
+                                <div class="w-20 h-20 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
+                                <div class="absolute inset-0 flex items-center justify-center text-emerald-500 text-xl">
+                                    <i class="fa-solid fa-microchip animate-pulse"></i>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <h5 class="text-sm font-bold text-slate-800 dark:text-slate-200 animate-pulse">
+                                    Chuyên gia AI đang phân tích dữ liệu...
+                                </h5>
+                                <p class="text-xs text-slate-400">
+                                    Đang truyền hình ảnh và tích hợp số đo cảm biến E-Ra sang Gemini Vision
+                                </p>
+                            </div>
+                            <div class="max-w-xs mx-auto text-left text-xs space-y-2 bg-slate-50 dark:bg-slate-950/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500">
+                                <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                                    <i class="fa-solid fa-circle-check text-[11px]"></i>
+                                    <span>Thu thập chỉ số cảm biến E-Ra</span>
+                                </div>
+                                <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                                    <i class="fa-solid fa-circle-check text-[11px]"></i>
+                                    <span>Tối ưu hóa hình ảnh lá cây</span>
+                                </div>
+                                <div class="flex items-center gap-2 text-blue-600 dark:text-blue-400 animate-pulse">
+                                    <i class="fa-solid fa-spinner animate-spin text-[11px]"></i>
+                                    <span>Gemini Vision đang phân tích bệnh học...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Trạng Thái Hiển Thị Kết Quả (Result State) -->
+                        <div id="aiResultState" class="hidden mt-4 space-y-4">
+                            
+                            <!-- Health Status Banner -->
+                            <div id="diagnosisBanner" class="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <div id="diagnosisIconWrap" class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-sm">
+                                        <i id="diagnosisIcon" class="fa-solid fa-shield-heart"></i>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span id="diagnosisBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider">
+                                                KHỎE MẠNH
+                                            </span>
+                                            <span id="diagnosisScore" class="text-xs font-bold text-slate-500">
+                                                Điểm: 95/100
+                                            </span>
+                                        </div>
+                                        <h4 id="diseaseNameText" class="text-base font-extrabold text-slate-900 dark:text-white mt-1">
+                                            Cây khỏe mạnh, không phát hiện bệnh
+                                        </h4>
+                                    </div>
+                                </div>
+
+                                <!-- Snapshot Môi Trường E-Ra Tức Thời -->
+                                <div class="flex items-center gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800 text-[11px]">
+                                    <div class="text-center px-2 border-r border-slate-200 dark:border-slate-800">
+                                        <div class="text-slate-400 text-[9px] uppercase">Nhiệt độ</div>
+                                        <div id="snapTemp" class="font-bold text-rose-500">29°C</div>
+                                    </div>
+                                    <div class="text-center px-2 border-r border-slate-200 dark:border-slate-800">
+                                        <div class="text-slate-400 text-[9px] uppercase">Ẩm KK</div>
+                                        <div id="snapHumidAir" class="font-bold text-blue-500">78%</div>
+                                    </div>
+                                    <div class="text-center px-2">
+                                        <div class="text-slate-400 text-[9px] uppercase">Ẩm đất</div>
+                                        <div id="snapSoil" class="font-bold text-emerald-500">31%</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 3 Phân Mục Chi Tiết -->
+                            <div class="space-y-3">
+                                
+                                <!-- Mục 1: Chẩn đoán lá cây -->
+                                <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
+                                    <h5 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mb-1 text-emerald-600 dark:text-emerald-400">
+                                        <i class="fa-solid fa-magnifying-glass-chart"></i>
+                                        <span>1. Phân Tích Hình Thái Lá Cây:</span>
+                                    </h5>
+                                    <p id="diagnosisDetailText" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                                        Đang tải...
+                                    </p>
+                                </div>
+
+                                <!-- Mục 2: Đánh giá tác động môi trường E-Ra -->
+                                <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
+                                    <h5 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mb-1 text-blue-600 dark:text-blue-400">
+                                        <i class="fa-solid fa-cloud-sun"></i>
+                                        <span>2. Đánh Giá Tác Động Môi Trường E-Ra:</span>
+                                    </h5>
+                                    <p id="envAssessmentText" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                                        Đang tải...
+                                    </p>
+                                </div>
+
+                                <!-- Mục 3: Khuyến nghị hành động tức thì -->
+                                <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
+                                    <h5 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mb-1 text-amber-600 dark:text-amber-400">
+                                        <i class="fa-solid fa-lightbulb"></i>
+                                        <span>3. Khuyến Nghị Hành Động Tức Thời:</span>
+                                    </h5>
+                                    <p id="recommendationsText" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                                        Đang tải...
+                                    </p>
+                                </div>
+
+                            </div>
+
+                            <!-- Mục 4: Phím tắt điều khiển nhanh thiết bị tương ứng khuyến nghị AI -->
+                            <div id="quickActuationsBox" class="p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-indigo-500/10 border border-emerald-500/20">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                        <i class="fa-solid fa-bolt text-amber-500"></i>
+                                        <span>Thực thi điều khiển thiết bị E-Ra ngay:</span>
+                                    </span>
+                                    <div id="suggestedButtonsContainer" class="flex flex-wrap items-center gap-2">
+                                        <!-- Dynamic action buttons will be rendered here -->
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <!-- Footer Info -->
+                    <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Chẩn đoán bởi Google Gemini Multimodal Vision</span>
+                        <span id="analysisTimestamp">Thời gian: Chưa phân tích</span>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ====================================================================
+             C. BIỂU ĐỒ REALTIME VÀ NHẬT KÝ HOẠT ĐỘNG
+             ==================================================================== -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Biểu đồ đường xu hướng cảm biến (Chart.js) -->
+            <div class="lg:col-span-2 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-5 bg-indigo-600 rounded-full"></div>
+                            <h3 class="text-base font-bold text-slate-900 dark:text-white">
+                                Biểu Đồ Diễn Biến Cảm Biến Thời Gian Thực
+                            </h3>
+                        </div>
+                        <span class="text-xs text-slate-400">30 lần đo gần nhất</span>
+                    </div>
+
+                    <!-- Canvas Chart.js -->
+                    <div class="relative w-full h-72 sm:h-80">
+                        <canvas id="sensorChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
+                    <div class="flex items-center gap-4">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Nhiệt độ</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Độ ẩm không khí</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Độ ẩm đất</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Điện áp PIN</span>
+                    </div>
+                    <span class="font-mono text-[11px] text-slate-400">Tần số quét: 3s/lần</span>
+                </div>
+            </div>
+
+            <!-- Cột phải: Nhật ký sự kiện & Chi tiết cấu hình kết nối -->
+            <div class="space-y-6">
+                
+                <!-- Nhật ký hoạt động (Activity Log) -->
+                <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                    <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-blue-500"></i>
+                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">Nhật Ký Thao Tác</h4>
+                        </div>
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Thời gian thực</span>
+                    </div>
+
+                    <ul id="activityLogList" class="space-y-1 max-h-52 overflow-y-auto pr-1">
+                        <li class="text-xs text-slate-400 text-center py-4">Đang nạp nhật ký...</li>
+                    </ul>
+                </div>
+
+                <!-- Thẻ Thông Tin Nền Tảng E-Ra -->
+                <div class="rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                    <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <i class="fa-solid fa-server text-emerald-500"></i>
+                        <h4 class="text-sm font-bold text-slate-900 dark:text-white">Thông Tin Hệ Thống E-Ra</h4>
+                    </div>
+
+                    <div class="space-y-2 text-xs">
+                        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
+                            <span class="text-slate-400">Nền tảng:</span>
+                            <span class="font-semibold text-slate-700 dark:text-slate-200">EoH Platform (E-Ra)</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
+                            <span class="text-slate-400">Base URL:</span>
+                            <a href="https://backend.eoh.io" target="_blank" class="font-mono text-blue-500 hover:underline">https://backend.eoh.io</a>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
+                            <span class="text-slate-400">Chip / Vi điều khiển:</span>
+                            <span class="font-semibold text-slate-700 dark:text-slate-200">ESP32 DEV (ID: 20957)</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
+                            <span class="text-slate-400">Mã thiết bị:</span>
+                            <span class="font-semibold text-slate-700 dark:text-slate-200">Nhà kính thông minh (35306)</span>
+                        </div>
+                        <div class="flex justify-between py-1">
+                            <span class="text-slate-400">Tài liệu API:</span>
+                            <a href="https://backend.eoh.io/swagger/" target="_blank" class="text-xs font-semibold text-blue-500 hover:underline flex items-center gap-1">
+                                Swagger Docs <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-12 border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+        <p>E-Ra IoT Web Dashboard • Dự Án Khoa Học Kỹ Thuật (DAKHKT2) • Tích Hợp Nền Tảng EoH Platform</p>
+    </footer>
+
+    <!-- Application JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
